@@ -1,7 +1,8 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 
-const ALERT_EMAIL = 'adil215@gmail.com';
+const ALERT_EMAIL = process.env.ALERT_EMAIL || 'adil215@gmail.com';
+const ALERT_PHONE = process.env.ALERT_PHONE || '267-529-5899';
 
 function createTransporter() {
   return nodemailer.createTransport({
@@ -22,14 +23,14 @@ async function sendDisconnectEmail(qrImagePath) {
     await transporter.sendMail({
       from: process.env.SMTP_USER,
       to: ALERT_EMAIL,
-      subject: 'WhatsApp DSR Automation Disconnected - Scan QR Code with phone 267-529-5899',
+      subject: `WhatsApp DSR Automation Disconnected - Scan QR Code with phone ${ALERT_PHONE}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:520px;">
           <h2 style="color:#d32f2f;">⚠️ WhatsApp Automation Disconnected</h2>
           <p>The WhatsApp DSR bot on the server has been disconnected and needs to be re-linked.</p>
-          <p><strong>Scan the QR code below using WhatsApp on phone 267-529-5899:</strong></p>
+          <p><strong>Scan the QR code below using WhatsApp on phone ${ALERT_PHONE}:</strong></p>
           <ol>
-            <li>Open WhatsApp on <strong>267-529-5899</strong></li>
+            <li>Open WhatsApp on <strong>${ALERT_PHONE}</strong></li>
             <li>Tap <strong>Settings → Linked Devices → Link a Device</strong></li>
             <li>Scan the QR code image below</li>
           </ol>
