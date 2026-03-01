@@ -1,7 +1,8 @@
 const cron = require('node-cron');
 const config = require('./config');
-const { hasSheetUpdated, downloadImage } = require('./sheet');
+const { hasSheetUpdated, downloadImage, getLastChangedAt } = require('./sheet');
 const { postImage, isReady } = require('./poster');
+const { sendDSRMissingEmail } = require('./notify');
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function randomBetween(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -35,9 +36,45 @@ function getActiveWindow() {
   return -1;
 }
 
-// Track state to prevent double-posts
+// Track state to prevent double-posts and duplicate alerts
 let postScheduled = false;
-const postedThisWindow = {};  // e.g. { '1pm_Mon Mar 01 2026': true }
+const postedThisWindow = {};   // e.g. { '1pm_Mon Mar 01 2026': true }
+const staleAlertSent = {};     // e.g. { '1pm_Mon Mar 01 2026': true }
+
+// Staleness check runs 40 min after each window's expected GAS update time
+// GAS runs at 1:05, 4:05, 7:05 ET → alert if still no update by 1:45, 4:45, 7:45
+const STALE_CHECK_TIMES = [
+  { h: 13, m: 43, label: '1pm' },
+  { h: 16, m: 43, label: '4pm' },
+  { h: 19, m: 43, label: '7pm' },
+];
+
+async function checkDSRStaleness() {
+  const { h, m, dateStr } = getEasternTime();
+  const nowMins = h * 60 + m;
+
+  for (const check of STALE_CHECK_TIMES) {
+    const checkMins = check.h * 60 + check.m;
+    if (nowMins < checkMins || nowMins > checkMins + 4) continue;
+
+    const alertKey = check.label + '_' + dateStr;
+    if (staleAlertSent[alertKey]) continue;
+
+    // If we already posted for this window, no alert needed
+    const windowKey = getWindowKey(check.label);
+    if (postedThisWindow[windowKey]) continue;
+
+    const lastChanged = getLastChangedAt();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const isStale = !lastChanged || (Date.now() - lastChanged) > twoHoursMs;
+
+    if (isStale && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      console.log(`[scheduler] DSR stale for ${check.label} window — sending alert email.`);
+      staleAlertSent[alertKey] = true;
+      await sendDSRMissingEmail();
+    }
+  }
+}
 
 function getWindowKey(label) {
   return label + '_' + getEasternTime().dateStr;
@@ -122,10 +159,10 @@ function startScheduler() {
   }
 
   // Production: check every 5 minutes with random ±90s jitter
-  // so the bot never fires at exactly the same second each time
   cron.schedule('*/5 * * * *', () => {
     const jitterMs = randomBetween(0, 90) * 1000;
     setTimeout(checkForUpdate, jitterMs);
+    setTimeout(checkDSRStaleness, jitterMs + 1000);
   });
 
   console.log('[scheduler] Production mode active.');

@@ -5,6 +5,9 @@ const { fromBuffer } = require('pdf2pic');
 const config = require('./config');
 
 let lastKnownUpdateText = null;
+let lastChangedAt = null;
+
+function getLastChangedAt() { return lastChangedAt; }
 
 async function hasSheetUpdated() {
   try {
@@ -32,6 +35,7 @@ async function hasSheetUpdated() {
 
     console.log('[sheets] Change detected, will post.');
     lastKnownUpdateText = currentText;
+    lastChangedAt = Date.now();
     return true;
 
   } catch (err) {
@@ -68,4 +72,4 @@ async function downloadImage(type) {
   return result.path;
 }
 
-module.exports = { hasSheetUpdated, downloadImage };
+module.exports = { hasSheetUpdated, downloadImage, getLastChangedAt };

@@ -3,6 +3,7 @@ const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const path = require('path');
 const config = require('./config');
+const { sendDisconnectEmail } = require('./notify');
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'sales-bot' }),
@@ -13,6 +14,7 @@ const client = new Client({
 });
 
 let isReady = false;
+let wasEverReady = false; // tracks if we were previously connected (vs first-time setup)
 let lastCaptionIndex = -1;
 
 function sleep(ms) {
@@ -63,15 +65,25 @@ function initWhatsApp() {
     client.on('qr', qr => {
       console.log('\n[whatsapp] Scan this QR code with your phone:\n');
       qrcode.generate(qr, { small: true });
+
       const qrImagePath = path.join(__dirname, 'qr.png');
-      QRCode.toFile(qrImagePath, qr, { width: 400 }, (err) => {
-        if (!err) console.log(`\n[whatsapp] QR code also saved as image: ${qrImagePath}\n`);
+      QRCode.toFile(qrImagePath, qr, { width: 400 }, async (err) => {
+        if (err) return;
+        console.log(`\n[whatsapp] QR code saved: ${qrImagePath}\n`);
+
+        // Only email the QR if this is a re-auth (was previously connected)
+        // so we don't spam on first-time setup
+        if (wasEverReady && process.env.SMTP_USER && process.env.SMTP_PASS) {
+          console.log('[whatsapp] Previously connected — sending disconnect email...');
+          await sendDisconnectEmail(qrImagePath);
+        }
       });
     });
 
     client.on('ready', () => {
       console.log('[whatsapp] Client is ready!');
       isReady = true;
+      wasEverReady = true;
 
       client.getChats().then(chats => {
         const groups = chats.filter(c => c.isGroup);
