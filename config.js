@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
   GAS_URL: process.env.GAS_URL,
   GROUP_CHAT_ID: process.env.GROUP_CHAT_ID,
-  TEST_MODE: true,
+  TEST_MODE: false,
   CAPTIONS: [
     'Updates so far',
     'Update as of today',
